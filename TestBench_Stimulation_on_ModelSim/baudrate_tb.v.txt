@@ -1,0 +1,65 @@
+`timescale 1ns / 1ps
+
+module BaudRateGenerator_tb;
+
+    reg clk;
+    reg reset_n;
+    reg [1:0] baud_select;
+    wire tx_clk;
+    wire rx_clk;
+
+    // Instantiate DUT
+    BaudRateGenerator uut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .baud_select(baud_select),
+        .tx_clk(tx_clk),
+        .rx_clk(rx_clk)
+    );
+
+    // Generate 50 MHz clock (20 ns period)
+    initial clk = 0;
+    always #10 clk = ~clk;
+
+    // Monitor các xung đầu ra
+    integer tx_edge_count = 0;
+    integer rx_edge_count = 0;
+
+    reg tx_clk_prev, rx_clk_prev;
+
+    initial begin
+        // Initialize
+        reset_n = 0;
+        baud_select = 2'b00; // 9600
+        #100;
+        reset_n = 1;
+
+        // Theo dõi trong 5ms mỗi chế độ baud_select
+        repeat (4) begin
+            tx_edge_count = 0;
+            rx_edge_count = 0;
+
+            $display("Testing baud_select = %b", baud_select);
+            #5000_000; // 5ms at 1ns resolution
+
+            $display("tx_clk toggles: %0d", tx_edge_count);
+            $display("rx_clk toggles: %0d", rx_edge_count);
+
+            baud_select = baud_select + 1;
+            #1000_000; // Wait 1ms before next test
+        end
+
+        $display("Test completed.");
+        $stop;
+    end
+
+    // Đếm số lần tx_clk và rx_clk đổi trạng thái
+    always @(posedge clk) begin
+        tx_clk_prev <= tx_clk;
+        rx_clk_prev <= rx_clk;
+
+        if (tx_clk_prev != tx_clk) tx_edge_count <= tx_edge_count + 1;
+        if (rx_clk_prev != rx_clk) rx_edge_count <= rx_edge_count + 1;
+    end
+
+endmodule

@@ -1,0 +1,100 @@
+`timescale 1ns / 1ps
+
+module tb_UartReceiver;
+
+    reg clk;
+    reg enable;
+    reg rx_in;
+    reg parity_enable;
+    reg parity_odd_even;
+    reg rx_read;
+    wire [7:0] rx_data;
+    wire fifo_empty, fifo_full, error;
+    wire [2:0] current_state;
+
+    // Instantiate the UartReceiver module
+    UartReceiver uut (
+        .clk(clk),
+        .enable(enable),
+        .rx_in(rx_in),
+        .parity_enable(parity_enable),
+        .parity_odd_even(parity_odd_even),
+        .rx_read(rx_read),
+        .rx_data(rx_data),
+        .fifo_empty(fifo_empty),
+        .fifo_full(fifo_full),
+        .error(error),
+        .current_state(current_state)
+    );
+
+    // Clock generation (16x baud rate)
+    initial clk = 0;
+    always #10 clk = ~clk; // 20ns period => 50MHz clock
+
+    // Task to send a UART frame
+    task send_uart_frame;
+        input [7:0] data;
+        input parity_en;
+        input parity_odd;
+        reg parity_bit;
+        integer i;
+        begin
+            // Start bit
+            rx_in = 0;
+            #(16 * 20); // 16 clock ticks
+
+            // Data bits (LSB first)
+            parity_bit = 0;
+            for (i = 0; i < 8; i = i + 1) begin
+                rx_in = data[i];
+                parity_bit = parity_bit ^ data[i];
+                #(16 * 20);
+            end
+
+            // Parity bit
+            if (parity_en) begin
+                if (parity_odd)
+                    rx_in = ~parity_bit; // odd parity
+                else
+                    rx_in = parity_bit;  // even parity
+                #(16 * 20);
+            end
+
+            // Stop bit
+            rx_in = 1;
+            #(16 * 20);
+        end
+    endtask
+
+    initial begin
+        // Initial values
+        enable = 0;
+        rx_in = 1; // idle state
+        parity_enable = 1;
+        parity_odd_even = 0; // even parity
+        rx_read = 0;
+
+        // Reset and enable
+        #100;
+        enable = 1;
+
+        // Send one frame: 0xA5 = 8'b10100101
+        // Even parity: 1^0^1^0^0^1^0^1 = 0 => parity bit = 0
+        send_uart_frame(8'hA5, 1, 0);
+
+        // Wait for receiver to complete
+        #1000;
+
+        // Read data from FIFO
+        rx_read = 1;
+        #20;
+        rx_read = 0;
+
+        // Wait and finish
+        #200;
+        $display("Received: %h", rx_data);
+        $display("Error: %b", error);
+        $finish;
+    end
+
+endmodule

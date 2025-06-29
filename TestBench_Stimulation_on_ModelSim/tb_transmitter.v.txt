@@ -1,0 +1,79 @@
+`timescale 1ns / 1ps
+
+module tb_UartTransmitter;
+
+    reg clk;
+    reg enable;
+    reg tx_start;
+    reg [7:0] tx_in;
+    reg parity_enable;
+    reg parity_odd_even;
+
+    wire out;
+    wire busy;
+    wire done;
+    wire [2:0] current_state;
+
+    // Instantiate the module
+    UartTransmitter uut (
+        .clk(clk),
+        .enable(enable),
+        .tx_start(tx_start),
+        .tx_in(tx_in),
+        .parity_enable(parity_enable),
+        .parity_odd_even(parity_odd_even),
+        .out(out),
+        .busy(busy),
+        .done(done),
+        .current_state(current_state)
+    );
+
+    // Clock generator (baudtick rate)
+    initial clk = 0;
+    always #20 clk = ~clk; // 25MHz => 40ns period, simulates baud tick
+
+    // Task để gửi một byte
+    task transmit_byte;
+        input [7:0] byte;
+        begin
+            wait (!busy); // đợi transmitter rảnh
+            @(posedge clk);
+            tx_in <= byte;
+            tx_start <= 1;
+            @(posedge clk);
+            tx_start <= 0;
+        end
+    endtask
+
+    integer i;
+
+    initial begin
+        // Init
+        clk = 0;
+        enable = 0;
+        tx_start = 0;
+        tx_in = 8'h00;
+        parity_enable = 1;
+        parity_odd_even = 0; // even parity
+
+        // Bật module
+        #100;
+        enable = 1;
+
+        // Gửi dữ liệu 0xA5 = 8'b10100101 (parity even)
+        transmit_byte(8'hA5);
+
+        // Đợi truyền xong
+        wait (done);
+        #100;
+
+        // Gửi thêm một byte khác (0x3C)
+        transmit_byte(8'h3C);
+        wait (done);
+        #100;
+
+        $display("Transmission done.");
+        $stop;
+    end
+
+endmodule
